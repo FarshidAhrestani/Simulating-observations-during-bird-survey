@@ -1,0 +1,94 @@
+  ################################################################################
+  # Generate count and related data
+  ################################################################################
+  #Generating pre-count data
+  pre.counts <- matrix(data=NA, nrow=rpois(1,120), ncol=nyear)
+  ################################################################################
+  obs.eff1 <- matrix(NA, nrow=nrow(pre.counts), ncol=ncol(pre.counts)) 
+  observers <- matrix(NA, nrow=nrow(pre.counts), ncol=ncol(pre.counts)) 
+  new.obs.rtes <- rep(NA, length(nrow(obs.eff1)))
+  # now to make more realistic, assign another observer at some point to half the routes
+  for (i in 1:nrow(obs.eff1)){
+    new.obs.rtes[i] <- rbinom(1,1,.5)
+  }
+  
+  # Number of observers
+  nobservers <- length(new.obs.rtes)+sum(new.obs.rtes)
+  # Creating when the new observer come along
+  new.obs.year <- floor(runif(length(new.obs.rtes),2,10))*new.obs.rtes
+  new.obs.year[new.obs.year==0] <- 1
+  obs.counter <- 0
+  for (i in 1:nrow(obs.eff1)){
+    obs.eff1[i,new.obs.year[i]:ncol(obs.eff1)] <- rnorm(1,0,0.5)
+    obs.counter <- obs.counter+1
+    observers[i,new.obs.year[i]:ncol(obs.eff1)] <-obs.counter
+    if (new.obs.year[i] != 1){
+      obs.counter <- obs.counter+1
+      observers[i,1:(new.obs.year[i]-1)] <-obs.counter
+      other.obs <- rnorm(1,0,0.5)
+      obs.eff1[i,1:(new.obs.year[i]-1)] <- other.obs
+    }
+  }
+  #################################################################################
+  #This is for obs.eff2
+  new.obs.eff1 <- rep(NA, length(obs.eff1))
+  for (i in 1:length(new.obs.eff1)){
+    new.obs.eff1[i] <- rnorm(1,0,1)
+  }
+  
+  #### Now matrix of first year effects. Here everyone is assumed  new in year1
+  obs.eff2 <- matrix(0, nrow=nrow(pre.counts), ncol=ncol(pre.counts))
+  # Create firs-year matrix
+  firstyear <- matrix(0, nrow=nrow(pre.counts), ncol=ncol(pre.counts))
+  obs.eff2[,1] <- -.2
+  firstyear[,1] <- 1
+  for (i in 1:nrow(obs.eff2)){
+    obs.eff2[i,new.obs.year[i]] <- -.2
+    firstyear[i,new.obs.year[i]] <- 1
+  }
+  #################################################################################
+  ## noise matrix
+  noise <- matrix(rnorm(nrow(pre.counts)*ncol(pre.counts),0,0.3), nrow=nrow(pre.counts), ncol=ncol(pre.counts))
+
+  ## strat matrix
+  nstrata <- 5
+  n.strat.rep <- round(nrow(pre.counts)/nstrata)
+  n.5 <- n.strat.rep + (nrow(pre.counts)-5*n.strat.rep)
+  strat.row <- c(rep(1,n.strat.rep), rep(2,n.strat.rep), rep(3,n.strat.rep), rep(4,n.strat.rep), rep(5,n.5))
+  strat <- replicate(10, strat.row)
+
+  ## Generating population data and counts 
+  ntot <- matrix(NA, nrow=nstrata, ncol=ncol(pre.counts))    
+  ntot[,1] <- rpois(nstrata, 20) # generate initial population index for a mean of 20
+  
+  # time-constant vital rates
+  phi = 0.55
+  f = 0.5 
+  
+  for (i in 1:nrow(ntot)){
+    for (j in 2:ncol(ntot)){
+      ntot[i,j] <- rbinom(1,ntot[i,j-1],phi) + rpois(1,ntot[i,j-1]*f)
+    }
+  }
+  
+  ## year matrix
+  year.nos <- c(1:10)
+  year.rows <- as.data.frame(replicate(nrow(pre.counts), year.nos))
+  year <- t(year.rows)
+  
+  log.lambda <- matrix(NA, nrow=nrow(pre.counts), ncol=ncol(pre.counts))
+  
+  for (i in 1:nrow(pre.counts)){
+    for ( j in 1:ncol(pre.counts)){
+      log.lambda[i,j] <- log(ntot[strat[i,j], year[i,j]]) + obs.eff1[i,j] + obs.eff2[i,j] + noise[i,j]
+    }
+  }
+  
+  count.pois <- round(exp(log.lambda))     
+  counts.final <- matrix(NA, nrow=nrow(pre.counts), ncol=ncol(pre.counts))
+  
+  for (i in 1:nrow(pre.counts)){
+    for ( j in 1:ncol(pre.counts)){
+      counts.final[i,j] <- rpois(1, count.pois[i,j])
+    }
+  }
